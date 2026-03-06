@@ -1,0 +1,702 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NBA Kalshi Command Center</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #0d1117;
+            --bg-card: #161b22;
+            --bg-card-hover: #1c2129;
+            --border: #30363d;
+            --text: #e6edf3;
+            --text-dim: #8b949e;
+            --text-muted: #484f58;
+            --green: #3fb950;
+            --green-dim: rgba(63,185,80,0.15);
+            --red: #f85149;
+            --red-dim: rgba(248,81,73,0.15);
+            --blue: #58a6ff;
+            --blue-dim: rgba(88,166,255,0.15);
+            --orange: #d29922;
+            --orange-dim: rgba(210,153,34,0.15);
+            --purple: #bc8cff;
+            --yellow: #e3b341;
+            --gap: 14px;
+            --radius: 6px;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+        .container { max-width: 1320px; margin: 0 auto; padding: 20px; }
+
+        /* Header */
+        .header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 16px 0; margin-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+        .header h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+        .header h1 span { color: var(--blue); }
+        .header-meta { display: flex; gap: 16px; align-items: center; font-size: 13px; color: var(--text-dim); }
+        .live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green); display: inline-block; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+        /* KPI Row */
+        .kpi-row {
+            display: grid; grid-template-columns: repeat(6, 1fr);
+            gap: var(--gap); margin-bottom: var(--gap);
+        }
+        .kpi {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 16px 18px;
+        }
+        .kpi-label { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+        .kpi-value { font-size: 26px; font-weight: 700; font-variant-numeric: tabular-nums; }
+        .kpi-sub { font-size: 12px; margin-top: 4px; }
+        .kpi-sub.pos { color: var(--green); }
+        .kpi-sub.neg { color: var(--red); }
+        .kpi-sub.neutral { color: var(--text-dim); }
+
+        /* Chart Grid */
+        .chart-grid {
+            display: grid; grid-template-columns: 2fr 1fr;
+            gap: var(--gap); margin-bottom: var(--gap);
+        }
+        .chart-grid-3 {
+            display: grid; grid-template-columns: 1fr 1fr 1fr;
+            gap: var(--gap); margin-bottom: var(--gap);
+        }
+        .card {
+            background: var(--bg-card); border: 1px solid var(--border);
+            border-radius: var(--radius); padding: 18px 20px;
+        }
+        .card-title {
+            font-size: 13px; font-weight: 600; color: var(--text-dim);
+            text-transform: uppercase; letter-spacing: 0.5px;
+            margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center;
+        }
+        .card-title .badge {
+            font-size: 11px; padding: 2px 8px; border-radius: 10px;
+            font-weight: 500; text-transform: none; letter-spacing: 0;
+        }
+        .badge-green { background: var(--green-dim); color: var(--green); }
+        .badge-blue { background: var(--blue-dim); color: var(--blue); }
+        .badge-orange { background: var(--orange-dim); color: var(--orange); }
+        .badge-red { background: var(--red-dim); color: var(--red); }
+        canvas { max-height: 280px; }
+
+        /* Goal Progress */
+        .goal-track { margin-top: 10px; }
+        .goal-bar-bg {
+            height: 10px; background: var(--border); border-radius: 5px; overflow: hidden;
+            position: relative;
+        }
+        .goal-bar-fill {
+            height: 100%; border-radius: 5px;
+            background: linear-gradient(90deg, var(--blue), var(--green));
+            transition: width 1s ease;
+        }
+        .goal-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--text-dim); margin-top: 4px; }
+
+        /* Bet History Table */
+        .table-wrap { overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        thead th {
+            text-align: left; padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-dim); font-weight: 600; font-size: 11px;
+            text-transform: uppercase; letter-spacing: 0.5px;
+            cursor: pointer; user-select: none; white-space: nowrap;
+        }
+        thead th:hover { color: var(--text); }
+        tbody td { padding: 10px 12px; border-bottom: 1px solid rgba(48,54,61,0.5); }
+        tbody tr:hover { background: var(--bg-card-hover); }
+        .result-w { color: var(--green); font-weight: 600; }
+        .result-l { color: var(--red); font-weight: 600; }
+        .pl-pos { color: var(--green); }
+        .pl-neg { color: var(--red); }
+        .type-tag {
+            display: inline-block; padding: 2px 8px; border-radius: 3px;
+            font-size: 11px; font-weight: 500;
+        }
+        .type-standalone { background: var(--blue-dim); color: var(--blue); }
+        .type-parlay { background: var(--purple); color: #fff; background: rgba(188,140,255,0.2); color: var(--purple); }
+        .type-moonshot { background: var(--orange-dim); color: var(--orange); }
+
+        /* Edge Framework */
+        .edge-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+        .edge-item {
+            display: flex; align-items: center; gap: 8px;
+            padding: 8px 10px; border-radius: 4px; font-size: 12px;
+            background: rgba(255,255,255,0.02);
+        }
+        .edge-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+        .edge-dot.active { background: var(--green); }
+        .edge-dot.partial { background: var(--orange); }
+        .edge-dot.missing { background: var(--red); }
+        .edge-name { color: var(--text); }
+        .edge-num { color: var(--text-muted); font-variant-numeric: tabular-nums; min-width: 18px; }
+
+        /* Lessons */
+        .lesson {
+            padding: 10px 12px; border-left: 3px solid var(--border);
+            margin-bottom: 8px; font-size: 13px; color: var(--text-dim);
+            background: rgba(255,255,255,0.02); border-radius: 0 4px 4px 0;
+        }
+        .lesson strong { color: var(--text); }
+
+        /* Streak */
+        .streak { display: flex; gap: 4px; margin-top: 8px; }
+        .streak-dot {
+            width: 28px; height: 28px; border-radius: 4px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; font-weight: 700;
+        }
+        .streak-w { background: var(--green-dim); color: var(--green); }
+        .streak-l { background: var(--red-dim); color: var(--red); }
+
+        /* Footer */
+        .footer {
+            text-align: center; padding: 20px 0; margin-top: 10px;
+            font-size: 11px; color: var(--text-muted);
+            border-top: 1px solid var(--border);
+        }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            .kpi-row { grid-template-columns: repeat(3, 1fr); }
+            .chart-grid, .chart-grid-3 { grid-template-columns: 1fr; }
+            .edge-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 600px) {
+            .kpi-row { grid-template-columns: repeat(2, 1fr); }
+            .header { flex-direction: column; gap: 8px; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <!-- Header -->
+    <div class="header">
+        <h1>NBA <span>Kalshi</span> Command Center</h1>
+        <div class="header-meta">
+            <span><span class="live-dot"></span> Daily run: 1:30 PM ET</span>
+            <span>Updated: Mar 5, 2026</span>
+        </div>
+    </div>
+
+    <!-- KPI Row -->
+    <div class="kpi-row">
+        <div class="kpi">
+            <div class="kpi-label">Balance</div>
+            <div class="kpi-value" id="kpi-balance">$385.06</div>
+            <div class="kpi-sub pos" id="kpi-balance-change">+$173.17 all-time</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Record</div>
+            <div class="kpi-value" id="kpi-record">5-3</div>
+            <div class="kpi-sub neutral">62.5% win rate</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">ROI</div>
+            <div class="kpi-value pos" style="color:var(--green)">47.6%</div>
+            <div class="kpi-sub neutral">On $364.36 risked</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Best Win</div>
+            <div class="kpi-value" style="font-size:22px">+$108.29</div>
+            <div class="kpi-sub neutral">Mar 3 · 4-leg</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Worst Loss</div>
+            <div class="kpi-value" style="font-size:22px; color:var(--red)">-$49.97</div>
+            <div class="kpi-sub neutral">Mar 3 · 2-leg</div>
+        </div>
+        <div class="kpi">
+            <div class="kpi-label">Edges Active</div>
+            <div class="kpi-value" style="color:var(--blue)">14/18</div>
+            <div class="kpi-sub neutral">2 partial · 2 blocked</div>
+        </div>
+    </div>
+
+    <!-- Goal Progress -->
+    <div class="card" style="margin-bottom:var(--gap)">
+        <div class="card-title">
+            Goal: $10,000
+            <span class="badge badge-blue" id="goal-pct">3.9%</span>
+        </div>
+        <div class="goal-track">
+            <div class="goal-bar-bg">
+                <div class="goal-bar-fill" id="goal-fill" style="width:3.9%"></div>
+            </div>
+            <div class="goal-labels">
+                <span>$211.89 start</span>
+                <span id="goal-current">$385.06 current</span>
+                <span>$10,000 target</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 1: Balance + W/L -->
+    <div class="chart-grid">
+        <div class="card">
+            <div class="card-title">
+                Balance Growth
+                <span class="badge badge-green">+81.7%</span>
+            </div>
+            <canvas id="balance-chart"></canvas>
+        </div>
+        <div class="card">
+            <div class="card-title">P/L by Bet Type</div>
+            <canvas id="pl-type-chart"></canvas>
+            <div style="margin-top:12px">
+                <div class="card-title" style="margin-bottom:8px">Recent Results</div>
+                <div class="streak" id="streak-dots"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row 2: Risk/Reward + Edge Dist + Per-Bet -->
+    <div class="chart-grid-3">
+        <div class="card">
+            <div class="card-title">Risk vs Return</div>
+            <canvas id="risk-return-chart"></canvas>
+        </div>
+        <div class="card">
+            <div class="card-title">Cumulative P/L by Bet</div>
+            <canvas id="cumulative-chart"></canvas>
+        </div>
+        <div class="card">
+            <div class="card-title">Strategy Mix (by $ risked)</div>
+            <canvas id="strategy-chart"></canvas>
+        </div>
+    </div>
+
+    <!-- Bet History Table -->
+    <div class="card" style="margin-bottom:var(--gap)">
+        <div class="card-title">
+            Bet History
+            <span class="badge badge-blue">8 bets</span>
+        </div>
+        <div class="table-wrap">
+            <table id="bet-table">
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Date</th>
+                        <th>Type</th>
+                        <th>Picks</th>
+                        <th>Risk</th>
+                        <th>P/L</th>
+                        <th>Result</th>
+                        <th>Balance</th>
+                    </tr>
+                </thead>
+                <tbody id="bet-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Edge Framework + Lessons -->
+    <div class="chart-grid">
+        <div class="card">
+            <div class="card-title">
+                Edge Framework
+                <span class="badge badge-green">14 active</span>
+            </div>
+            <div class="edge-grid" id="edge-grid"></div>
+        </div>
+        <div class="card">
+            <div class="card-title">Lessons Learned</div>
+            <div id="lessons"></div>
+        </div>
+    </div>
+
+    <div class="footer">
+        NBA Kalshi Command Center · Scheduled daily at 1:30 PM ET · Memory: MEMORY.md · Edges: EDGE_AUDIT.md
+    </div>
+</div>
+
+<script>
+// ===== DATA =====
+const BETS = [
+    { id:1, date:'2/27', type:'Standalone', picks:'DET ML', risk:14, pl:34, result:'W', balance:245.89 },
+    { id:2, date:'2/27', type:'3-Leg', picks:'DET+OKC+NYK', risk:32, pl:32, result:'W', balance:277.89 },
+    { id:3, date:'2/27', type:'4-Leg', picks:'DET+OKC+NYK+DAL', risk:27.09, pl:-27.09, result:'L', balance:250.80 },
+    { id:4, date:'2/28', type:'3-Leg', picks:'TOR+LAL+NOP', risk:33.70, pl:53.30, result:'W', balance:304.10 },
+    { id:5, date:'3/1', type:'3-Leg', picks:'DET+BOS+LAL', risk:59.82, pl:71.18, result:'W', balance:375.28 },
+    { id:6, date:'3/3', type:'4-Leg', picks:'ORL+CHA+PHX+SAS', risk:98.71, pl:108.29, result:'W', balance:483.57 },
+    { id:7, date:'3/3', type:'10-Leg', picks:'10-team moonshot', risk:48.54, pl:-48.54, result:'L', balance:435.03 },
+    { id:8, date:'3/3', type:'2-Leg', picks:'DET+SAS', risk:49.97, pl:-49.97, result:'L', balance:385.06 },
+];
+
+const EDGES = [
+    { id:1, name:'Kalshi vs Book Delta', status:'active' },
+    { id:2, name:'YES-Side Bias', status:'active' },
+    { id:3, name:'Threshold Advantage', status:'active' },
+    { id:4, name:'Ladder Verification', status:'active' },
+    { id:5, name:'Injury ML Parlays', status:'active' },
+    { id:6, name:'Blowout Risk Filter', status:'active' },
+    { id:7, name:'Cross-Game Stacking', status:'active' },
+    { id:8, name:'Usage Rate Spikes', status:'active' },
+    { id:9, name:'Systematic Prop X-Ref', status:'active' },
+    { id:10, name:'Line Staleness Arb', status:'active' },
+    { id:11, name:'Q1/H1 Markets', status:'active' },
+    { id:12, name:'CLV Tracking', status:'active' },
+    { id:13, name:'Mid-Leg Exit', status:'active' },
+    { id:14, name:'Pace-Adjusted Totals', status:'active' },
+    { id:15, name:'Regression Flags', status:'partial' },
+    { id:16, name:'SGP Correlation Model', status:'partial' },
+    { id:17, name:'Combo RFQ vs Book', status:'missing' },
+    { id:18, name:'Volume Spike Detection', status:'missing' },
+];
+
+const LESSONS = [
+    { text: '<strong>DET overexposure</strong> — appears in losses more than wins. Diversify.' },
+    { text: '<strong>Moonshots are -EV</strong> — 10-leg = lottery. Cap at 4% bankroll.' },
+    { text: '<strong>OKC trap avoidance</strong> — SGA+Williams+Hartenstein OUT, line only 78¢. Swapped PHX. Correct.' },
+    { text: '<strong>Same-team correlation</strong> — SAS in 2 bets on Mar 3, both lost. Diversify across teams.' },
+    { text: '<strong>Don\'t force MLs</strong> — Mar 5: MLs had <2% delta. Real value was props/spreads.' },
+    { text: '<strong>Ladder kills false positives</strong> — Adebayo 12+ REB looked +21% but was fairly priced.' },
+];
+
+const STARTING_BALANCE = 211.89;
+const CURRENT_BALANCE = 385.06;
+const GOAL = 10000;
+
+// ===== CHART COLORS =====
+const C = {
+    green: '#3fb950', red: '#f85149', blue: '#58a6ff',
+    purple: '#bc8cff', orange: '#d29922', yellow: '#e3b341',
+    gray: '#484f58', white: '#e6edf3',
+};
+
+// ===== BALANCE CHART =====
+(function() {
+    const labels = ['Start', ...BETS.map(b => `#${b.id} (${b.date})`)];
+    const data = [STARTING_BALANCE, ...BETS.map(b => b.balance)];
+    const colors = data.map((v, i) => i === 0 ? C.blue : (v >= data[i-1] ? C.green : C.red));
+
+    new Chart(document.getElementById('balance-chart'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                data,
+                borderColor: C.blue,
+                backgroundColor: 'rgba(88,166,255,0.08)',
+                borderWidth: 2.5,
+                fill: true,
+                tension: 0.3,
+                pointRadius: 5,
+                pointBackgroundColor: colors,
+                pointBorderColor: colors,
+                pointHoverRadius: 8,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `$${ctx.parsed.y.toFixed(2)}`,
+                        afterLabel: ctx => {
+                            if (ctx.dataIndex === 0) return '';
+                            const bet = BETS[ctx.dataIndex - 1];
+                            return `${bet.result === 'W' ? '+' : ''}$${bet.pl.toFixed(2)} · ${bet.picks}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { color: 'rgba(48,54,61,0.4)' }, ticks: { color: C.gray, font: { size: 11 } } },
+                y: {
+                    grid: { color: 'rgba(48,54,61,0.4)' },
+                    ticks: { color: C.gray, callback: v => `$${v}` },
+                }
+            }
+        }
+    });
+})();
+
+// ===== P/L BY TYPE =====
+(function() {
+    const types = {};
+    BETS.forEach(b => {
+        let t = b.type;
+        if (t === '10-Leg') t = 'Moonshot';
+        else if (t.includes('Leg')) t = 'Parlay';
+        if (!types[t]) types[t] = { wins: 0, losses: 0, pl: 0 };
+        if (b.result === 'W') types[t].wins++;
+        else types[t].losses++;
+        types[t].pl += b.pl;
+    });
+
+    const labels = Object.keys(types);
+    const plData = labels.map(l => types[l].pl);
+    const bgColors = plData.map(v => v >= 0 ? 'rgba(63,185,80,0.7)' : 'rgba(248,81,73,0.7)');
+    const borderColors = plData.map(v => v >= 0 ? C.green : C.red);
+
+    new Chart(document.getElementById('pl-type-chart'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                data: plData,
+                backgroundColor: bgColors,
+                borderColor: borderColors,
+                borderWidth: 1,
+                borderRadius: 3,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => `$${ctx.parsed.y.toFixed(2)}` } }
+            },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: C.gray, font: { size: 11 } } },
+                y: {
+                    grid: { color: 'rgba(48,54,61,0.4)' },
+                    ticks: { color: C.gray, callback: v => `$${v}` },
+                }
+            }
+        }
+    });
+})();
+
+// ===== STREAK DOTS =====
+(function() {
+    const el = document.getElementById('streak-dots');
+    BETS.forEach(b => {
+        const d = document.createElement('div');
+        d.className = `streak-dot streak-${b.result.toLowerCase()}`;
+        d.textContent = b.result;
+        d.title = `#${b.id}: ${b.picks} (${b.result === 'W' ? '+' : ''}$${b.pl.toFixed(2)})`;
+        el.appendChild(d);
+    });
+})();
+
+// ===== RISK vs RETURN SCATTER =====
+(function() {
+    const data = BETS.map(b => ({
+        x: b.risk,
+        y: b.pl,
+        label: `#${b.id} ${b.picks}`,
+    }));
+
+    new Chart(document.getElementById('risk-return-chart'), {
+        type: 'scatter',
+        data: {
+            datasets: [{
+                data,
+                backgroundColor: BETS.map(b => b.result === 'W' ? 'rgba(63,185,80,0.7)' : 'rgba(248,81,73,0.7)'),
+                borderColor: BETS.map(b => b.result === 'W' ? C.green : C.red),
+                borderWidth: 1.5,
+                pointRadius: 7,
+                pointHoverRadius: 10,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const b = BETS[ctx.dataIndex];
+                            return [`${b.picks}`, `Risk: $${b.risk.toFixed(2)}`, `P/L: $${b.pl.toFixed(2)}`];
+                        }
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    title: { display: true, text: 'Risk ($)', color: C.gray },
+                    grid: { color: 'rgba(48,54,61,0.4)' },
+                    ticks: { color: C.gray, callback: v => `$${v}` },
+                },
+                y: {
+                    title: { display: true, text: 'P/L ($)', color: C.gray },
+                    grid: { color: 'rgba(48,54,61,0.4)' },
+                    ticks: { color: C.gray, callback: v => `$${v}` },
+                }
+            }
+        }
+    });
+})();
+
+// ===== CUMULATIVE P/L =====
+(function() {
+    let cum = 0;
+    const cumData = BETS.map(b => { cum += b.pl; return cum; });
+    const labels = BETS.map(b => `#${b.id}`);
+
+    new Chart(document.getElementById('cumulative-chart'), {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                data: cumData,
+                borderColor: C.green,
+                backgroundColor: 'rgba(63,185,80,0.08)',
+                fill: true,
+                borderWidth: 2.5,
+                tension: 0.3,
+                pointRadius: 4,
+                pointBackgroundColor: cumData.map((v,i) => {
+                    if (i === 0) return v >= 0 ? C.green : C.red;
+                    return v >= cumData[i-1] ? C.green : C.red;
+                }),
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => `$${ctx.parsed.y.toFixed(2)} cumulative` } }
+            },
+            scales: {
+                x: { grid: { display: false }, ticks: { color: C.gray } },
+                y: { grid: { color: 'rgba(48,54,61,0.4)' }, ticks: { color: C.gray, callback: v => `$${v}` } }
+            }
+        }
+    });
+})();
+
+// ===== STRATEGY MIX DOUGHNUT =====
+(function() {
+    const buckets = {};
+    BETS.forEach(b => {
+        let t = b.type;
+        if (t === '10-Leg') t = 'Moonshot';
+        else if (t.includes('Leg')) t = 'Parlay';
+        if (!buckets[t]) buckets[t] = 0;
+        buckets[t] += b.risk;
+    });
+    const labels = Object.keys(buckets);
+    const data = labels.map(l => +buckets[l].toFixed(2));
+    const colors = [C.blue, C.purple, C.orange, C.yellow, C.green];
+
+    new Chart(document.getElementById('strategy-chart'), {
+        type: 'doughnut',
+        data: {
+            labels,
+            datasets: [{
+                data,
+                backgroundColor: colors.map(c => c + 'BB'),
+                borderColor: '#161b22',
+                borderWidth: 2,
+            }]
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            cutout: '55%',
+            plugins: {
+                legend: { position: 'bottom', labels: { color: C.gray, padding: 12, usePointStyle: true, font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            const total = ctx.dataset.data.reduce((a,b) => a+b, 0);
+                            const pct = ((ctx.parsed / total) * 100).toFixed(1);
+                            return `$${ctx.parsed.toFixed(2)} (${pct}%)`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+})();
+
+// ===== BET TABLE =====
+(function() {
+    const tbody = document.getElementById('bet-tbody');
+    let sortCol = null, sortDir = 'desc';
+
+    function render(data) {
+        tbody.innerHTML = data.map(b => {
+            let typeClass = 'type-parlay';
+            let typeLabel = b.type;
+            if (b.type === 'Standalone') { typeClass = 'type-standalone'; }
+            else if (b.type === '10-Leg') { typeClass = 'type-moonshot'; typeLabel = 'Moonshot'; }
+
+            return `<tr>
+                <td style="color:var(--text-muted)">${b.id}</td>
+                <td>${b.date}</td>
+                <td><span class="type-tag ${typeClass}">${typeLabel}</span></td>
+                <td>${b.picks}</td>
+                <td>$${b.risk.toFixed(2)}</td>
+                <td class="${b.pl >= 0 ? 'pl-pos' : 'pl-neg'}">${b.pl >= 0 ? '+' : ''}$${b.pl.toFixed(2)}</td>
+                <td class="result-${b.result.toLowerCase()}">${b.result}</td>
+                <td style="font-variant-numeric:tabular-nums">$${b.balance.toFixed(2)}</td>
+            </tr>`;
+        }).join('');
+    }
+
+    document.querySelectorAll('#bet-table thead th').forEach((th, i) => {
+        th.addEventListener('click', () => {
+            const fields = ['id','date','type','picks','risk','pl','result','balance'];
+            const field = fields[i];
+            if (sortCol === field) sortDir = sortDir === 'asc' ? 'desc' : 'asc';
+            else { sortCol = field; sortDir = 'desc'; }
+            const sorted = [...BETS].sort((a, b) => {
+                let av = a[field], bv = b[field];
+                if (typeof av === 'string') { av = av.toLowerCase(); bv = bv.toLowerCase(); }
+                const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+                return sortDir === 'asc' ? cmp : -cmp;
+            });
+            render(sorted);
+        });
+    });
+
+    render(BETS);
+})();
+
+// ===== EDGE GRID =====
+(function() {
+    const grid = document.getElementById('edge-grid');
+    EDGES.forEach(e => {
+        const div = document.createElement('div');
+        div.className = 'edge-item';
+        div.innerHTML = `
+            <span class="edge-num">${e.id}</span>
+            <span class="edge-dot ${e.status}"></span>
+            <span class="edge-name">${e.name}</span>
+        `;
+        grid.appendChild(div);
+    });
+})();
+
+// ===== LESSONS =====
+(function() {
+    const el = document.getElementById('lessons');
+    LESSONS.forEach(l => {
+        const div = document.createElement('div');
+        div.className = 'lesson';
+        div.innerHTML = l.text;
+        el.appendChild(div);
+    });
+})();
+
+// ===== GOAL PROGRESS ANIMATION =====
+(function() {
+    const pct = ((CURRENT_BALANCE - STARTING_BALANCE) / (GOAL - STARTING_BALANCE) * 100).toFixed(1);
+    document.getElementById('goal-pct').textContent = pct + '%';
+    setTimeout(() => {
+        document.getElementById('goal-fill').style.width = pct + '%';
+    }, 300);
+})();
+</script>
+</body>
+</html>
